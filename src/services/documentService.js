@@ -1,0 +1,368 @@
+import { supabase } from '../lib/supabase';
+import { getSampleDatasetById } from '../utils/sampleDatasets';
+
+class DocumentService {
+  // Upload file to storage and create document record
+  async uploadDocument(file, userId) {
+    try {
+      // Generate unique file name
+      const fileExt = file?.name?.split('.')?.pop()?.toLowerCase();
+      const fileName = `${Date.now()}_${Math.random()?.toString(36)?.substring(2)}.${fileExt}`;
+      const filePath = `${userId}/${fileName}`;
+
+      // Upload to Supabase Storage
+      const { data: uploadData, error: uploadError } = await supabase?.storage?.from('maritime-documents')?.upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (uploadError) {
+        throw new Error(`Upload failed: ${uploadError.message}`);
+      }
+
+      // Create document record
+      const { data: documentData, error: documentError } = await supabase?.from('documents')?.insert({
+          user_id: userId,
+          file_name: fileName,
+          original_file_name: file?.name,
+          file_type: this.getFileType(fileExt),
+          file_size: file?.size,
+          storage_path: filePath,
+          status: 'processing'
+        })?.select()?.single();
+
+      if (documentError) {
+        throw new Error(`Database insert failed: ${documentError.message}`);
+      }
+
+      // Start background processing
+      this.processDocument(documentData?.id, file);
+
+      return documentData;
+    } catch (error) {
+      console.error('Upload error:', error);
+      throw error;
+    }
+  }
+
+  // Process sample dataset
+  async processSampleDataset(sampleId, userId) {
+    try {
+      const sampleData = getSampleDatasetById(sampleId);
+      if (!sampleData) {
+        throw new Error('Sample dataset not found');
+      }
+
+      // Create document record for sample
+      const { data: documentData, error: documentError } = await supabase?.from('documents')?.insert({
+          user_id: userId,
+          file_name: `${sampleData?.title}.pdf`,
+          original_file_name: `${sampleData?.title}.pdf`,
+          file_type: 'pdf',
+          file_size: parseFloat(sampleData?.fileSize?.replace(/[^0-9.]/g, '')) * 1024 * 1024,
+          storage_path: `samples/${sampleId}.pdf`,
+          status: 'processing',
+          is_sample: true,
+          sample_dataset_id: sampleId,
+          processing_started_at: new Date()?.toISOString()
+        })?.select()?.single();
+
+      if (documentError) {
+        throw new Error(`Failed to create sample document: ${documentError.message}`);
+      }
+
+      // Process sample data
+      await this.processSampleEvents(documentData?.id, sampleData);
+
+      return documentData;
+    } catch (error) {
+      console.error('Sample processing error:', error);
+      throw error;
+    }
+  }
+
+  // Process document and extract events (simulated for now)
+  async processDocument(documentId, file) {
+    try {
+      // Update status to processing
+      await supabase?.from('documents')?.update({ 
+          status: 'processing',
+          processing_started_at: new Date()?.toISOString()
+        })?.eq('id', documentId);
+
+      // Simulate processing delay
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // For demo purposes, we'll simulate event extraction based on file name/content
+      let events = await this.simulateEventExtraction(file);
+
+      // Insert extracted events
+      const { error: eventsError } = await supabase?.from('extracted_events')?.insert(events?.map(event => ({
+          document_id: documentId,
+          ...event
+        })));
+
+      if (eventsError) {
+        throw new Error(`Failed to insert events: ${eventsError.message}`);
+      }
+
+      // Update document as completed
+      const processingDuration = 45 + Math.floor(Math.random() * 30); // 45-75 seconds
+      await supabase?.from('documents')?.update({ 
+          status: 'completed',
+          processing_completed_at: new Date()?.toISOString(),
+          processing_duration_seconds: processingDuration,
+          events_count: events?.length
+        })?.eq('id', documentId);
+
+    } catch (error) {
+      console.error('Processing error:', error);
+      
+      // Update document as failed
+      await supabase?.from('documents')?.update({ 
+          status: 'failed',
+          error_message: error?.message,
+          processing_completed_at: new Date()?.toISOString()
+        })?.eq('id', documentId);
+      
+      throw error;
+    }
+  }
+
+  // Process sample dataset events
+  async processSampleEvents(documentId, sampleData) {
+    try {
+      // Convert sample events to our format
+      let events = sampleData?.data?.events?.map((event, index) => ({
+        document_id: documentId,
+        event_description: event?.description,
+        event_type: this.determineEventType(event?.description),
+        start_time: event?.time,
+        end_time: this.calculateEndTime(event?.time, event?.description),
+        vessel_name: sampleData?.vessel,
+        port_name: sampleData?.port
+      })) || [];
+
+      // Insert events
+      const { error: eventsError } = await supabase?.from('extracted_events')?.insert(events);
+
+      if (eventsError) {
+        throw new Error(`Failed to insert sample events: ${eventsError.message}`);
+      }
+
+      // Update document as completed
+      const processingDuration = 15 + Math.floor(Math.random() * 10); // 15-25 seconds for samples
+      await supabase?.from('documents')?.update({ 
+          status: 'completed',
+          processing_completed_at: new Date()?.toISOString(),
+          processing_duration_seconds: processingDuration,
+          events_count: events?.length
+        })?.eq('id', documentId);
+
+    } catch (error) {
+      console.error('Sample processing error:', error);
+      
+      // Update document as failed
+      await supabase?.from('documents')?.update({ 
+          status: 'failed',
+          error_message: error?.message,
+          processing_completed_at: new Date()?.toISOString()
+        })?.eq('id', documentId);
+      
+      throw error;
+    }
+  }
+
+  // Simulate event extraction from uploaded files
+  async simulateEventExtraction(file) {
+    const fileName = file?.name?.toLowerCase() || '';
+    
+    // Basic file type validation
+    const allowedTypes = ['pdf', 'docx', 'doc'];
+    const fileExt = fileName?.split('.')?.pop();
+    
+    if (!allowedTypes?.includes(fileExt)) {
+      throw new Error(`Unsupported file type: ${fileExt}. Please upload PDF, DOCX, or DOC files.`);
+    }
+
+    // Simulate different extraction results based on filename patterns
+    let vesselName = 'Unknown Vessel';
+    let portName = 'Unknown Port';
+    let events = [];
+
+    // Try to extract vessel and port from filename
+    if (fileName?.includes('mv_') || fileName?.includes('mv ')) {
+      const match = fileName?.match(/mv[_\s]([a-z]+[_\s][a-z]+)/i);
+      if (match) {
+        vesselName = `MV ${match?.[1]?.replace(/[_]/g, ' ')}`;
+      }
+    }
+
+    // Extract port names from common patterns
+    const portPatterns = [
+      /hamburg/i, /rotterdam/i, /singapore/i, /houston/i, /antwerp/i,
+      /shanghai/i, /tokyo/i, /mumbai/i, /dubai/i, /bremen/i
+    ];
+    
+    for (const pattern of portPatterns) {
+      if (pattern?.test(fileName)) {
+        portName = fileName?.match(pattern)?.[0];
+        portName = portName?.charAt(0)?.toUpperCase() + portName?.slice(1);
+        break;
+      }
+    }
+
+    // Check if file contains maritime-related keywords
+    const maritimeKeywords = [
+      'sof', 'statement', 'facts', 'vessel', 'ship', 'cargo', 'port',
+      'loading', 'discharge', 'berth', 'arrival', 'departure'
+    ];
+
+    const hasMaritimeContent = maritimeKeywords?.some(keyword => 
+      fileName?.includes(keyword?.toLowerCase())
+    );
+
+    if (!hasMaritimeContent) {
+      throw new Error(
+        'No maritime content detected in this document. Please upload a Statement of Facts or similar maritime document.'
+      );
+    }
+
+    // Generate realistic events based on file characteristics
+    const baseTime = new Date();
+    baseTime?.setDate(baseTime?.getDate() - Math.floor(Math.random() * 30)); // Random date within last 30 days
+
+    events = [
+      {
+        event_description: `Vessel arrival at Port of ${portName}`,
+        event_type: 'arrival',
+        start_time: new Date(baseTime.getTime())?.toISOString(),
+        end_time: new Date(baseTime.getTime() + 45 * 60 * 1000)?.toISOString(), // +45 min
+        vessel_name: vesselName,
+        port_name: portName
+      },
+      {
+        event_description: 'Notice of Readiness tendered',
+        event_type: 'other',
+        start_time: new Date(baseTime.getTime() + 60 * 60 * 1000)?.toISOString(), // +1 hour
+        end_time: new Date(baseTime.getTime() + 75 * 60 * 1000)?.toISOString(), // +15 min
+        vessel_name: vesselName,
+        port_name: portName
+      },
+      {
+        event_description: 'Cargo operations commenced',
+        event_type: 'loading',
+        start_time: new Date(baseTime.getTime() + 2 * 60 * 60 * 1000)?.toISOString(), // +2 hours
+        end_time: new Date(baseTime.getTime() + 6 * 60 * 60 * 1000)?.toISOString(), // +4 hours duration
+        vessel_name: vesselName,
+        port_name: portName
+      },
+      {
+        event_description: 'Port authority inspection',
+        event_type: 'inspection',
+        start_time: new Date(baseTime.getTime() + 24 * 60 * 60 * 1000)?.toISOString(), // +1 day
+        end_time: new Date(baseTime.getTime() + 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000)?.toISOString(), // +2 hours
+        vessel_name: vesselName,
+        port_name: portName
+      },
+      {
+        event_description: 'Cargo operations completed',
+        event_type: 'loading',
+        start_time: new Date(baseTime.getTime() + 30 * 60 * 60 * 1000)?.toISOString(), // +30 hours
+        end_time: new Date(baseTime.getTime() + 32 * 60 * 60 * 1000)?.toISOString(), // +2 hours
+        vessel_name: vesselName,
+        port_name: portName
+      },
+      {
+        event_description: `Vessel departure from Port of ${portName}`,
+        event_type: 'departure',
+        start_time: new Date(baseTime.getTime() + 33 * 60 * 60 * 1000)?.toISOString(), // +33 hours
+        end_time: new Date(baseTime.getTime() + 33.5 * 60 * 60 * 1000)?.toISOString(), // +30 min
+        vessel_name: vesselName,
+        port_name: portName
+      }
+    ];
+
+    return events;
+  }
+
+  // Get document with events
+  async getDocumentWithEvents(documentId) {
+    try {
+      const { data: document, error: docError } = await supabase?.from('documents')?.select('*')?.eq('id', documentId)?.single();
+
+      if (docError) {
+        throw new Error(`Failed to fetch document: ${docError.message}`);
+      }
+
+      const { data: events, error: eventsError } = await supabase?.from('extracted_events')?.select('*')?.eq('document_id', documentId)?.order('start_time', { ascending: true });
+
+      if (eventsError) {
+        throw new Error(`Failed to fetch events: ${eventsError.message}`);
+      }
+
+      return { document, events };
+    } catch (error) {
+      console.error('Fetch error:', error);
+      throw error;
+    }
+  }
+
+  // Get user documents
+  async getUserDocuments(userId) {
+    try {
+      const { data, error } = await supabase?.from('documents')?.select('*')?.eq('user_id', userId)?.order('created_at', { ascending: false });
+
+      if (error) {
+        throw new Error(`Failed to fetch documents: ${error.message}`);
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error('Fetch documents error:', error);
+      throw error;
+    }
+  }
+
+  // Helper methods
+  getFileType(extension) {
+    const ext = extension?.toLowerCase();
+    switch (ext) {
+      case 'pdf': return 'pdf';
+      case 'docx': return 'docx';
+      case 'doc': return 'doc';
+      default: return 'pdf';
+    }
+  }
+
+  determineEventType(description) {
+    const desc = description?.toLowerCase() || '';
+    if (desc?.includes('arrival') || desc?.includes('arrived')) return 'arrival';
+    if (desc?.includes('departure') || desc?.includes('sailed') || desc?.includes('departed')) return 'departure';
+    if (desc?.includes('loading') || desc?.includes('load')) return 'loading';
+    if (desc?.includes('discharge') || desc?.includes('unload')) return 'discharging';
+    if (desc?.includes('inspection') || desc?.includes('survey')) return 'inspection';
+    if (desc?.includes('delay') || desc?.includes('wait')) return 'delay';
+    return 'other';
+  }
+
+  calculateEndTime(startTime, description) {
+    const start = new Date(startTime);
+    const desc = description?.toLowerCase() || '';
+    
+    // Estimate duration based on event type
+    let durationMinutes = 30; // default
+    
+    if (desc?.includes('loading') || desc?.includes('discharge')) {
+      durationMinutes = 240; // 4 hours for cargo operations
+    } else if (desc?.includes('inspection')) {
+      durationMinutes = 120; // 2 hours for inspection
+    } else if (desc?.includes('delay')) {
+      durationMinutes = 150; // 2.5 hours for delays
+    }
+    
+    return new Date(start.getTime() + durationMinutes * 60 * 1000)?.toISOString();
+  }
+}
+
+export const documentService = new DocumentService();
