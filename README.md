@@ -52,6 +52,26 @@ A sophisticated Natural Language Processing (NLP) application for extracting and
 - npm or yarn
 - Python 3.8+ (for NLP components)
 
+## 🧩 Adding Routes
+
+To add new routes to the application, update the `Routes.jsx` file:
+
+```jsx
+import { useRoutes } from "react-router-dom";
+import HomePage from "pages/HomePage";
+import AboutPage from "pages/AboutPage";
+
+const ProjectRoutes = () => {
+  let element = useRoutes([
+    { path: "/", element: <HomePage /> },
+    { path: "/about", element: <AboutPage /> },
+    // Add more routes as needed
+  ]);
+
+  return element;
+};
+```
+
 ## 🛠️ Installation
 
 1. Install dependencies:
@@ -162,25 +182,6 @@ sof_event_extractor/
 - Timeline Extraction Precision: >95%
 - Processing Speed: <2s per document
 - Support for 9 event types
-
-## 🧩 Adding Routes
-
-To add new routes to the application, update the `Routes.jsx` file:
-
-```jsx
-import { useRoutes } from "react-router-dom";
-import HomePage from "pages/HomePage";
-import AboutPage from "pages/AboutPage";
-
-const ProjectRoutes = () => {
-  let element = useRoutes([
-    { path: "/", element: <HomePage /> },
-    { path: "/about", element: <AboutPage /> },
-    // Add more routes as needed
-  ]);
-
-  return element;
-};
 
 
 ## 🎨 Styling
