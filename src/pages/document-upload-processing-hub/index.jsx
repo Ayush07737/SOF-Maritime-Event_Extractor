@@ -9,12 +9,10 @@ import UploadStatsCard from './components/UploadStatsCard';
 import Footer from './components/Footer';
 import Icon from '../../components/AppIcon';
 import Button from '../../components/ui/Button';
-import { useAuth } from '../../hooks/useAuth';
 import { documentService } from '../../services/documentService';
 
 const DocumentUploadProcessingHub = () => {
   const navigate = useNavigate();
-  const { user, loading: authLoading, signInDemo } = useAuth();
   const [uploadStatus, setUploadStatus] = useState('idle');
   const [uploadProgress, setUploadProgress] = useState(0);
   const [currentFile, setCurrentFile] = useState(null);
@@ -31,17 +29,16 @@ const DocumentUploadProcessingHub = () => {
   const [currentDocumentId, setCurrentDocumentId] = useState(null);
   const [error, setError] = useState(null);
 
-  // Load user documents on mount
+  // Load documents on mount
   useEffect(() => {
-    if (user?.id) {
-      loadUserDocuments();
-      loadUserStats();
-    }
-  }, [user?.id]);
+    loadUserDocuments();
+    loadUserStats();
+  }, []);
 
   const loadUserDocuments = async () => {
     try {
-      const documents = await documentService?.getUserDocuments(user?.id);
+      const documents = await documentService?.getUserDocuments();
+      if (!documents) return;
       
       // Transform documents to match the expected format
       const transformedDocs = documents?.map(doc => ({
@@ -86,11 +83,6 @@ const DocumentUploadProcessingHub = () => {
 
   // Handle sample dataset selection
   const handleSampleDatasetSelect = async (dataset) => {
-    if (!user) {
-      setError('Please sign in to process documents');
-      return;
-    }
-
     try {
       setError(null);
       setSelectedSampleData(dataset);
@@ -130,11 +122,6 @@ const DocumentUploadProcessingHub = () => {
 
   // Handle file upload
   const handleFileSelect = async (file) => {
-    if (!user) {
-      setError('Please sign in to upload documents');
-      return;
-    }
-
     try {
       setError(null);
       setCurrentFile(file);
@@ -228,54 +215,7 @@ const DocumentUploadProcessingHub = () => {
     return 100;
   };
 
-  // Show loading state while checking auth
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <Icon name="Loader2" size={32} className="animate-spin text-primary mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Show sign in prompt if not authenticated
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-background">
-        <Header />
-        <main className="pt-16">
-          <HeroSection />
-          <div className="max-w-4xl mx-auto px-4 lg:px-6 py-16 text-center">
-            <div className="bg-gradient-to-br from-card to-card/80 border border-border rounded-xl p-8">
-              <Icon name="Lock" size={48} className="mx-auto mb-6 text-primary" />
-              <h2 className="text-2xl font-bold text-foreground mb-4">
-                Sign In Required
-              </h2>
-              <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-                Please sign in to upload and process maritime documents. We'll extract events and provide downloadable results.
-              </p>
-              <Button
-                onClick={handleDemoSignIn}
-                size="lg"
-                className="maritime-transition-micro hover:maritime-shadow-interactive hover:scale-105"
-              >
-                <Icon name="LogIn" size={16} className="mr-2" />
-                Try Demo Account
-              </Button>
-              {error && (
-                <div className="mt-4 p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
-                  <p className="text-destructive text-sm">{error}</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </main>
-        <Footer />
-      </div>
-    );
-  }
+  // Main component content starts here
 
   return (
     <div className="min-h-screen bg-background">

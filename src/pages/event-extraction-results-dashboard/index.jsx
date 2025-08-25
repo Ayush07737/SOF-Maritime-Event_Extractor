@@ -6,14 +6,12 @@ import DocumentSummaryCard from './components/DocumentSummaryCard';
 import FilterPanel from './components/FilterPanel';
 import EventsDataTable from './components/EventsDataTable';
 import EmptyResultsState from './components/EmptyResultsState';
-import { useAuth } from '../../hooks/useAuth';
 import { documentService } from '../../services/documentService';
 import Icon from '../../components/AppIcon';
 
 const EventExtractionResultsDashboard = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, loading: authLoading } = useAuth();
   const [isFilterCollapsed, setIsFilterCollapsed] = useState(true);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [filteredEvents, setFilteredEvents] = useState([]);
@@ -31,10 +29,6 @@ const EventExtractionResultsDashboard = () => {
 
   // Load document and events data
   useEffect(() => {
-    if (!user || authLoading) {
-      return;
-    }
-
     if (!documentId) {
       setError('No document selected');
       setLoading(false);
@@ -42,7 +36,7 @@ const EventExtractionResultsDashboard = () => {
     }
 
     loadDocumentData();
-  }, [user, documentId, authLoading]);
+  }, [documentId]);
 
   const loadDocumentData = async () => {
     try {
@@ -242,24 +236,18 @@ const EventExtractionResultsDashboard = () => {
     navigate('/document-upload-processing-hub');
   };
 
-  // Show loading state while checking auth
-  if (authLoading || loading) {
+  // Show loading state
+  if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <Icon name="Loader2" size={32} className="animate-spin text-primary mx-auto mb-4" />
           <p className="text-muted-foreground">
-            {authLoading ? 'Loading...' : 'Loading document data...'}
+            Loading document data...
           </p>
         </div>
       </div>
     );
-  }
-
-  // Redirect to upload if no user
-  if (!user) {
-    navigate('/document-upload-processing-hub');
-    return null;
   }
 
   // Show error state

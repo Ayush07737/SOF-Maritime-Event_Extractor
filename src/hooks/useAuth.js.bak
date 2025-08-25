@@ -1,0 +1,31 @@
+import { useState } from 'react';
+
+// Simplified auth hook that always returns an authenticated state
+export function useAuth() {
+  const [user] = useState({ id: 'default-user', email: 'user@example.com' });
+  const [loading] = useState(false);
+  const [session] = useState({ user });
+
+  return {
+    user,
+    session,
+    loading,
+    signInDemo: async () => ({ user }),  // Mock sign-in function
+    signOut: async () => {},             // Mock sign-out function
+  };
+}
+
+    return () => {
+      subscription?.unsubscribe();
+    };
+  }, []);
+
+  return {
+    user,
+    session,
+    loading,
+    signOut: authService?.signOut,
+    signInDemo: authService?.signInDemo,
+    signUp: authService?.signUp
+  };
+}
