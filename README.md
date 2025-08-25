@@ -1,6 +1,6 @@
-# React
+# SOF Maritime Event Extractor
 
-A modern React-based project utilizing the latest frontend technologies and tools for building responsive web applications.
+A modern React-based application for extracting and analyzing maritime events from documents. This project utilizes the latest frontend technologies and tools for building responsive web applications.
 
 ## 🚀 Features
 
@@ -105,3 +105,6 @@ npm run build
 - Styled with Tailwind CSS
 
 Built with ❤️ on Rocket.new
+=======
+# SOF-Maritime-Event_Extractor
+>>>>>>> b052fc311f3e980d037afc651e962d606296ad13
